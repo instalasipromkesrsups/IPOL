@@ -22,7 +22,7 @@ import {
   RefreshCcw
 } from 'lucide-react';
 
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwRPAa3bKmXToPkstA6sa6t5ad42Vu2clH5MHB4qF7Mdw9IDd8HrdbkIoNwF_OaWKI0/exec"; 
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyDBEwnwo53rSdEXibdOcSuLUx6zNm3G4uq4d1yWaAC2JcPJ3tuBtKc3UN5VveZmawV/exec"; 
 
 const extractStandardQty = (name) => {
   const match = name.match(/\((\d+)\s*(Unit|Buah|Set)\)/i);
