@@ -18,10 +18,13 @@ import {
   Search,
   History,
   Building,
-  Edit3
+  Edit3,
+  RefreshCcw
 } from 'lucide-react';
 
-// Firebase dilewati sepenuhnya agar tidak error
+// MASUKKAN URL SPREADSHEET (DEPLOYMENT BARU) ANDA DI SINI
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyCU5Rb9vC2zLjfsdGAXBOK2PTY6Gg-up3IkrpuqmZt-bGRnj0AOssJkR04WYjxLhnn/exec"; 
+
 const extractStandardQty = (name) => {
   const match = name.match(/\((\d+)\s*(Unit|Buah|Set)\)/i);
   return match ? parseInt(match[1], 10) : 1;
@@ -209,8 +212,8 @@ const INVENTORY_DATA = {
 };
 
 export default function App() {
-  const [user, setUser] = useState(true);
   const [activeSessions, setActiveSessions] = useState([]);
+  const [isLoadingData, setIsLoadingData] = useState(false);
   
   const [step, setStep] = useState(1);
   const [roomType, setRoomType] = useState('President Suite'); 
@@ -219,7 +222,7 @@ export default function App() {
   const [building, setBuilding] = useState('Gedung B'); 
   const [officerName, setOfficerName] = useState('');
   
-  const [krsInputMode, setKrsInputMode] = useState('manual'); // Dipaksa manual karena DB Firebase tidak dipakai
+  const [krsInputMode, setKrsInputMode] = useState('db'); 
   const [selectedSessionId, setSelectedSessionId] = useState('');
   const [mrsReferenceData, setMrsReferenceData] = useState(null);
 
@@ -227,6 +230,30 @@ export default function App() {
   const [checkTime, setCheckTime] = useState('');
   const [checklist, setChecklist] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // FUNGSI PENARIKAN DATA AKTIF (MRS) DARI SPREADSHEET
+  const fetchActiveSessions = async () => {
+    setIsLoadingData(true);
+    try {
+      if (!WEB_APP_URL.includes("script.google.com")) return;
+      const response = await fetch(WEB_APP_URL);
+      const data = await response.json();
+      if (Array.isArray(data)) {
+        setActiveSessions(data);
+      }
+    } catch (error) {
+      console.error("Gagal mengambil data kamar aktif:", error);
+    } finally {
+      setIsLoadingData(false);
+    }
+  };
+
+  useEffect(() => {
+    if (actionType === 'KRS') {
+      fetchActiveSessions();
+      setKrsInputMode('db');
+    }
+  }, [actionType]);
 
   useEffect(() => {
     if (step === 1) {
@@ -243,7 +270,6 @@ export default function App() {
     ? Math.round((Object.keys(checklist).length / currentItems.length) * 100) 
     : 0;
 
-  // Handle MRS input
   const handleMrsChange = (itemId, field, value, itemName) => {
     setChecklist(prev => {
       const current = prev[itemId] || {
@@ -259,7 +285,6 @@ export default function App() {
     });
   };
 
-  // Handle KRS input
   const handleKrsChange = (itemId, status, condition = null) => {
     setChecklist(prev => ({
       ...prev,
@@ -284,18 +309,9 @@ export default function App() {
     currentItems.forEach(item => {
       if (!newChecklist[item.id]) {
         if (actionType === 'MRS') {
-          newChecklist[item.id] = {
-            qty: extractStandardQty(item.name),
-            unit: extractUnitType(item.name),
-            status: 'Sesuai',
-            note: ''
-          };
+          newChecklist[item.id] = { qty: extractStandardQty(item.name), unit: extractUnitType(item.name), status: 'Sesuai', note: '' };
         } else {
-          newChecklist[item.id] = { 
-            status: 'Sesuai', 
-            condition: 'Baik', 
-            note: '' 
-          };
+          newChecklist[item.id] = { status: 'Sesuai', condition: 'Baik', note: '' };
         }
       }
     });
@@ -304,7 +320,8 @@ export default function App() {
 
   const isStep1Valid = actionType === 'MRS' 
     ? (roomType !== '' && actionType !== '' && roomNumber.trim() !== '' && building !== '' && officerName.trim() !== '' && checkDate !== '' && checkTime !== '')
-    : (actionType === 'KRS' && officerName.trim() !== '' && checkDate !== '' && checkTime !== '' && roomNumber.trim() !== '' && roomType !== '' && building !== '');
+    : (actionType === 'KRS' && officerName.trim() !== '' && checkDate !== '' && checkTime !== '' && 
+        ((krsInputMode === 'db' && selectedSessionId !== '') || (krsInputMode === 'manual' && roomNumber.trim() !== '' && roomType !== '' && building !== '')));
 
   const isStep2Valid = currentItems.length > 0 && Object.keys(checklist).length === currentItems.length;
 
@@ -319,12 +336,9 @@ export default function App() {
     }
   };
 
-  // Fungsi Kirim Data ke Google Spreadsheet via Web App URL
   const sendDataToSpreadsheet = async (payloadData) => {
     try {
-      const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwGWjY7_yZGTiETClJIdW5VvhZ75b8IvRDv_dkG9clOMuUVSC6rYa8ZUTqJeGyapOnE/exec"; 
       if (!WEB_APP_URL.includes("script.google.com")) return;
-
       await fetch(WEB_APP_URL, {
         method: "POST",
         mode: "no-cors",
@@ -336,14 +350,11 @@ export default function App() {
     }
   };
 
-  // --- INI FUNGSI YANG SUDAH DIBERSIHKAN DARI FIREBASE ---
   const handleSubmit = async () => {
     setIsSubmitting(true);
-    
     try {
-      const sessionIdGenerated = "AUTO_" + new Date().getTime();
+      const sessionIdGenerated = selectedSessionId || ("AUTO_" + new Date().getTime());
 
-      // LANGSUNG tembak ke Google Spreadsheet (Mengabaikan Firebase sepenuhnya)
       await sendDataToSpreadsheet({
         sessionId: sessionIdGenerated,
         building,
@@ -356,7 +367,6 @@ export default function App() {
         checklist
       });
 
-      // Lanjut ke halaman centang sukses
       setStep(4);
     } catch (error) {
       console.error("Error saving document: ", error);
@@ -366,16 +376,8 @@ export default function App() {
   };
 
   const resetForm = () => {
-    setStep(1);
-    setRoomType('President Suite'); 
-    setActionType('');
-    setRoomNumber('');
-    setBuilding('Gedung B');
-    setOfficerName('');
-    setChecklist({});
-    setSelectedSessionId('');
-    setMrsReferenceData(null);
-    setKrsInputMode('manual');
+    setStep(1); setRoomType('President Suite'); setActionType(''); setRoomNumber(''); setBuilding('Gedung B');
+    setOfficerName(''); setChecklist({}); setSelectedSessionId(''); setMrsReferenceData(null); setKrsInputMode('db');
   };
 
   const selectPredefinedOfficer = (name) => {
@@ -391,10 +393,8 @@ export default function App() {
             <h1 className="text-2xl font-bold tracking-tight">Cek Inventaris</h1>
           </div>
           <p className="text-blue-100 text-sm font-medium">Sistem Terintegrasi Pengecekan Rawat Inap</p>
-          
           <div className="absolute top-5 right-5 bg-white/20 px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-semibold backdrop-blur-sm">
-            <Database size={14} className="text-green-300" />
-            <span>Online</span>
+            <Database size={14} className="text-green-300" /><span>Online</span>
           </div>
         </header>
 
@@ -432,16 +432,14 @@ export default function App() {
                 onClick={() => { setActionType('MRS'); setSelectedSessionId(''); setRoomNumber(''); }}
                 className={`p-4 rounded-xl border-2 font-bold flex flex-col items-center gap-2 transition-all ${actionType === 'MRS' ? 'border-green-500 bg-green-50 text-green-700 shadow-sm' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
               >
-                <span className="text-2xl block mb-1">🏥</span>
-                Sebelum MRS
+                <span className="text-2xl block mb-1">🏥</span> Sebelum MRS
                 <span className="text-xs font-normal text-center opacity-80">(Buka Sesi Kamar)</span>
               </button>
               <button 
                 onClick={() => { setActionType('KRS'); setRoomNumber(''); }}
                 className={`p-4 rounded-xl border-2 font-bold flex flex-col items-center gap-2 transition-all ${actionType === 'KRS' ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-sm' : 'border-slate-200 text-slate-500 hover:border-slate-300'}`}
               >
-                <span className="text-2xl block mb-1">🏠</span>
-                Sebelum KRS
+                <span className="text-2xl block mb-1">🏠</span> Sebelum KRS
                 <span className="text-xs font-normal text-center opacity-80">(Tutup Sesi Kamar)</span>
               </button>
             </div>
@@ -452,27 +450,17 @@ export default function App() {
               <h2 className="font-bold text-slate-700 mb-2 flex items-center gap-2 text-sm">
                 <Calendar size={16} className="text-blue-500"/> Tanggal
               </h2>
-              <input 
-                type="date" 
-                value={checkDate}
-                onChange={(e) => setCheckDate(e.target.value)}
-                className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all font-medium text-slate-700"
-              />
+              <input type="date" value={checkDate} onChange={(e) => setCheckDate(e.target.value)} className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none" />
             </div>
             <div>
               <h2 className="font-bold text-slate-700 mb-2 flex items-center gap-2 text-sm">
                 <Clock size={16} className="text-blue-500"/> Jam
               </h2>
-              <input 
-                type="time" 
-                value={checkTime}
-                onChange={(e) => setCheckTime(e.target.value)}
-                className="w-full p-3 border-2 border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all font-medium text-slate-700"
-              />
+              <input type="time" value={checkTime} onChange={(e) => setCheckTime(e.target.value)} className="w-full p-3 border-2 border-slate-200 rounded-xl outline-none" />
             </div>
           </div>
 
-          {(actionType === 'MRS' || actionType === 'KRS') && (
+          {actionType === 'MRS' && (
             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-6">
               <div>
                 <h2 className="font-bold text-slate-700 mb-3 px-1">Pilih Tipe Kamar</h2>
@@ -485,19 +473,13 @@ export default function App() {
                     <button
                       key={type.id}
                       onClick={() => setRoomType(type.id)}
-                      className={`p-4 rounded-xl border-2 flex items-center justify-between transition-all
-                        ${roomType === type.id 
-                          ? `border-${type.color}-500 bg-${type.color}-50 shadow-sm` 
-                          : 'border-slate-200 hover:border-slate-300'
-                        }`}
+                      className={`p-4 rounded-xl border-2 flex items-center justify-between transition-all ${roomType === type.id ? `border-${type.color}-500 bg-${type.color}-50 shadow-sm` : 'border-slate-200 hover:border-slate-300'}`}
                     >
                       <div className="flex items-center gap-3">
                         <div className={`p-2 rounded-lg ${roomType === type.id ? `bg-${type.color}-100 text-${type.color}-600` : 'bg-slate-100 text-slate-500'}`}>
                           {type.icon}
                         </div>
-                        <span className={`font-bold ${roomType === type.id ? `text-${type.color}-700` : 'text-slate-600'}`}>
-                          {type.id}
-                        </span>
+                        <span className={`font-bold ${roomType === type.id ? `text-${type.color}-700` : 'text-slate-600'}`}>{type.id}</span>
                       </div>
                       {roomType === type.id && <CheckCircle2 className={`text-${type.color}-500`} size={24} />}
                     </button>
@@ -507,44 +489,136 @@ export default function App() {
 
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-1">
-                  <h2 className="font-bold text-slate-700 mb-2 flex items-center gap-1.5 text-sm">
-                    <Building2 size={16} className="text-blue-500"/> Gedung
-                  </h2>
-                  <select
-                    value={building}
-                    onChange={(e) => setBuilding(e.target.value)}
-                    className="w-full p-4 border-2 border-slate-200 rounded-xl focus:border-blue-500 outline-none font-bold text-slate-800 bg-white"
-                  >
+                  <h2 className="font-bold text-slate-700 mb-2 flex items-center gap-1.5 text-sm"><Building2 size={16} className="text-blue-500"/> Gedung</h2>
+                  <select value={building} onChange={(e) => setBuilding(e.target.value)} className="w-full p-4 border-2 border-slate-200 rounded-xl font-bold bg-white">
                     <option value="Gedung B">Gedung B</option>
                     <option value="Gedung D">Gedung D</option>
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <h2 className="font-bold text-slate-700 mb-2 flex items-center gap-2 text-sm">
-                    <BedDouble size={16} className="text-blue-500"/> Nomor Kamar
-                  </h2>
-                  <input 
-                    type="text" 
-                    placeholder="Contoh: 301" 
-                    value={roomNumber}
-                    onChange={(e) => setRoomNumber(e.target.value)}
-                    className="w-full p-4 border-2 border-slate-200 rounded-xl focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none transition-all font-medium uppercase text-lg"
-                  />
+                  <h2 className="font-bold text-slate-700 mb-2 flex items-center gap-2 text-sm"><BedDouble size={16} className="text-blue-500"/> Nomor Kamar</h2>
+                  <input type="text" placeholder="Contoh: 301" value={roomNumber} onChange={(e) => setRoomNumber(e.target.value)} className="w-full p-4 border-2 border-slate-200 rounded-xl uppercase text-lg font-bold" />
                 </div>
               </div>
             </div>
           )}
+
+          {actionType === 'KRS' && (
+             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
+               
+               <div className="grid grid-cols-2 gap-2 bg-slate-200 p-1 rounded-xl">
+                 <button
+                   onClick={() => { setKrsInputMode('db'); setSelectedSessionId(''); }}
+                   className={`py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all
+                     ${krsInputMode === 'db' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
+                 >
+                   <Search size={16} /> Dari Kamar Aktif
+                 </button>
+                 <button
+                   onClick={() => { setKrsInputMode('manual'); setSelectedSessionId(''); setMrsReferenceData(null); }}
+                   className={`py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all
+                     ${krsInputMode === 'manual' ? 'bg-white text-orange-700 shadow-sm' : 'text-slate-600'}`}
+                 >
+                   <Edit3 size={16} /> Input Manual
+                 </button>
+               </div>
+
+               {krsInputMode === 'db' ? (
+                 <div className="space-y-3">
+                   <div className="flex justify-between items-center px-1">
+                     <h2 className="font-bold text-slate-700 text-sm flex items-center gap-2">Pilih Kamar Aktif (Database)</h2>
+                     <button onClick={fetchActiveSessions} className="text-blue-600 flex items-center gap-1 text-xs font-bold bg-blue-50 px-2 py-1 rounded hover:bg-blue-100">
+                       <RefreshCcw size={12} className={isLoadingData ? "animate-spin" : ""} /> Refresh
+                     </button>
+                   </div>
+                   
+                   {isLoadingData ? (
+                     <div className="bg-slate-100 p-6 rounded-2xl text-center border-2 border-slate-200">
+                       <p className="text-slate-500 font-bold text-sm animate-pulse">Menarik data dari Spreadsheet...</p>
+                     </div>
+                   ) : activeSessions.length === 0 ? (
+                     <div className="bg-slate-100 p-6 rounded-2xl text-center border-2 border-dashed border-slate-300">
+                        <History size={32} className="text-slate-400 mx-auto mb-2" />
+                        <p className="text-slate-600 font-medium text-sm">Tidak ada kamar/pasien aktif saat ini.</p>
+                        <p className="text-slate-500 text-xs mt-1">Silakan gunakan mode <b>Input Manual</b>.</p>
+                     </div>
+                   ) : (
+                     <div className="space-y-3">
+                       {activeSessions.map(session => (
+                          <button
+                            key={session.id}
+                            onClick={() => handleSelectSession(session.id)}
+                            className={`w-full text-left p-4 rounded-xl border-2 transition-all flex justify-between items-center
+                              ${selectedSessionId === session.id 
+                                ? 'border-orange-500 bg-orange-50 shadow-sm' 
+                                : 'border-slate-200 hover:border-slate-300 bg-white'
+                              }`}
+                          >
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-bold text-slate-800 text-lg">{session.building || 'Gedung B'} - {session.roomNumber}</span>
+                                <span className="bg-slate-200 text-slate-700 text-[10px] px-2 py-0.5 rounded-full font-bold">{session.roomType}</span>
+                              </div>
+                              <p className="text-xs text-slate-500">MRS: {session.mrsDate} oleh {session.mrsOfficer}</p>
+                            </div>
+                            {selectedSessionId === session.id && <CheckCircle2 className="text-orange-500" size={24} />}
+                          </button>
+                       ))}
+                     </div>
+                   )}
+                 </div>
+               ) : (
+                 <div className="space-y-4 animate-in fade-in duration-200">
+                   <div>
+                     <h2 className="font-bold text-slate-700 mb-3 px-1">Pilih Tipe Kamar</h2>
+                     <div className="flex flex-col gap-3">
+                       {[
+                         { id: 'President Suite', icon: <Building size={20} />, color: 'purple' },
+                         { id: 'VVIP', icon: <Crown size={20} />, color: 'indigo' },
+                         { id: 'VIP', icon: <Star size={20} />, color: 'blue' }
+                       ].map(type => (
+                         <button
+                           key={type.id}
+                           onClick={() => setRoomType(type.id)}
+                           className={`p-4 rounded-xl border-2 flex items-center justify-between transition-all ${roomType === type.id ? `border-${type.color}-500 bg-${type.color}-50 shadow-sm` : 'border-slate-200 hover:border-slate-300'}`}
+                         >
+                           <div className="flex items-center gap-3">
+                             <div className={`p-2 rounded-lg ${roomType === type.id ? `bg-${type.color}-100 text-${type.color}-600` : 'bg-slate-100 text-slate-500'}`}>
+                               {type.icon}
+                             </div>
+                             <span className={`font-bold ${roomType === type.id ? `text-${type.color}-700` : 'text-slate-600'}`}>{type.id}</span>
+                           </div>
+                           {roomType === type.id && <CheckCircle2 className={`text-${type.color}-500`} size={24} />}
+                         </button>
+                       ))}
+                     </div>
+                   </div>
+
+                   <div className="grid grid-cols-3 gap-3">
+                     <div className="col-span-1">
+                       <h2 className="font-bold text-slate-700 mb-2 flex items-center gap-1.5 text-sm"><Building2 size={16} className="text-orange-500"/> Gedung</h2>
+                       <select value={building} onChange={(e) => setBuilding(e.target.value)} className="w-full p-4 border-2 border-slate-200 rounded-xl focus:border-orange-500 font-bold bg-white">
+                         <option value="Gedung B">Gedung B</option>
+                         <option value="Gedung D">Gedung D</option>
+                       </select>
+                     </div>
+                     <div className="col-span-2">
+                       <h2 className="font-bold text-slate-700 mb-2 flex items-center gap-2 text-sm"><BedDouble size={16} className="text-orange-500"/> Nomor Kamar</h2>
+                       <input type="text" placeholder="Contoh: 301" value={roomNumber} onChange={(e) => setRoomNumber(e.target.value)} className="w-full p-4 border-2 border-slate-200 rounded-xl uppercase text-lg font-bold" />
+                     </div>
+                   </div>
+                 </div>
+               )}
+             </div>
+          )}
+
         </div>
 
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
           <button 
             disabled={!isStep1Valid}
             onClick={() => setStep(2)}
-            className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm
-              ${isStep1Valid 
-                ? 'bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98]' 
-                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              }`}
+            className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${isStep1Valid ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}
           >
             Mulai Pengecekan <ArrowRight size={20} />
           </button>
@@ -564,9 +638,7 @@ export default function App() {
       <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
         <header className="sticky top-0 bg-white shadow-sm z-20 px-4 py-4 border-b border-slate-200">
           <div className="flex items-center justify-between mb-3">
-            <button onClick={() => setStep(1)} className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-full">
-              <ArrowLeft size={24} />
-            </button>
+            <button onClick={() => setStep(1)} className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-full"><ArrowLeft size={24} /></button>
             <div className="text-center">
               <h1 className="font-bold text-slate-800 uppercase">{building} - {roomNumber}</h1>
               <p className="text-xs font-medium text-slate-500">{roomType} • Sebelum {actionType}</p>
@@ -579,20 +651,14 @@ export default function App() {
             <span className="text-blue-600">{progress}% ({Object.keys(checklist).length}/{currentItems.length})</span>
           </div>
           <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-            <div 
-              className="bg-blue-500 h-full transition-all duration-500 ease-out rounded-full" 
-              style={{ width: `${progress}%` }}
-            ></div>
+            <div className="bg-blue-500 h-full transition-all duration-500 ease-out rounded-full" style={{ width: `${progress}%` }}></div>
           </div>
         </header>
 
         <div className="flex-1 p-4 pb-40 overflow-y-auto space-y-6">
           
           {progress > 0 && progress < 100 && (
-            <button 
-              onClick={markAllRemainingAsOk}
-              className="w-full py-3 px-4 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl font-semibold flex items-center justify-center gap-2 hover:bg-blue-100 active:scale-[0.98] transition-transform shadow-sm"
-            >
+            <button onClick={markAllRemainingAsOk} className="w-full py-3 px-4 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl font-semibold flex items-center justify-center gap-2 shadow-sm">
               <CheckCheck size={20} /> Tandai Sisa Barang Sebagai {actionType === 'MRS' ? '"Sesuai"' : '"Baik"'}
             </button>
           )}
@@ -606,15 +672,11 @@ export default function App() {
                   const itemNameClean = cleanItemName(item.name);
                   const standardQty = extractStandardQty(item.name);
                   const unitType = extractUnitType(item.name);
-
                   const currentQty = checkData.qty !== undefined ? checkData.qty : standardQty;
                   const currentUnit = checkData.unit || unitType;
                   const currentStatus = checkData.status || 'Sesuai';
                   const condition = checkData.condition;
-                  
-                  const pastMrsData = (actionType === 'KRS' && mrsReferenceData) 
-                    ? mrsReferenceData.mrsChecklist[item.id] 
-                    : null;
+                  const pastMrsData = (actionType === 'KRS' && mrsReferenceData) ? mrsReferenceData.mrsChecklist[item.id] : null;
                   
                   return (
                     <div key={item.id} className={`bg-white p-4 rounded-xl shadow-sm border transition-colors ${checklist[item.id] ? 'border-blue-200' : 'border-slate-200'} flex flex-col gap-3`}>
@@ -635,24 +697,12 @@ export default function App() {
                           <div className="grid grid-cols-2 gap-3 items-center">
                             <div>
                               <label className="text-[11px] font-bold text-slate-400 block mb-1">JUMLAH FISIK</label>
-                              <input 
-                                type="number" 
-                                min="0"
-                                value={currentQty}
-                                onChange={(e) => handleMrsChange(item.id, 'qty', parseInt(e.target.value) || 0, item.name)}
-                                className="w-full p-2.5 border-2 border-slate-200 rounded-lg font-bold text-slate-800 text-center focus:border-blue-500 outline-none"
-                              />
+                              <input type="number" min="0" value={currentQty} onChange={(e) => handleMrsChange(item.id, 'qty', parseInt(e.target.value) || 0, item.name)} className="w-full p-2.5 border-2 border-slate-200 rounded-lg font-bold text-slate-800 text-center focus:border-blue-500 outline-none"/>
                             </div>
                             <div>
                               <label className="text-[11px] font-bold text-slate-400 block mb-1">SATUAN</label>
-                              <select 
-                                value={currentUnit}
-                                onChange={(e) => handleMrsChange(item.id, 'unit', e.target.value, item.name)}
-                                className="w-full p-2.5 border-2 border-slate-200 rounded-lg font-bold text-slate-700 bg-white focus:border-blue-500 outline-none text-sm"
-                              >
-                                <option value="Unit">Unit</option>
-                                <option value="Buah">Buah</option>
-                                <option value="Set">Set</option>
+                              <select value={currentUnit} onChange={(e) => handleMrsChange(item.id, 'unit', e.target.value, item.name)} className="w-full p-2.5 border-2 border-slate-200 rounded-lg font-bold text-slate-700 bg-white focus:border-blue-500 outline-none text-sm">
+                                <option value="Unit">Unit</option><option value="Buah">Buah</option><option value="Set">Set</option>
                               </select>
                             </div>
                           </div>
@@ -660,64 +710,23 @@ export default function App() {
                           <div>
                             <label className="text-[11px] font-bold text-slate-400 block mb-1">KETERANGAN</label>
                             <div className="grid grid-cols-2 gap-2">
-                              <button 
-                                onClick={() => handleMrsChange(item.id, 'status', 'Sesuai', item.name)}
-                                className={`py-2 rounded-lg font-bold text-xs border-2 transition-all
-                                  ${currentStatus === 'Sesuai' ? 'bg-green-50 border-green-500 text-green-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-500'}`}
-                              >
-                                ✅ Sesuai
-                              </button>
-                              <button 
-                                onClick={() => handleMrsChange(item.id, 'status', 'Kendala', item.name)}
-                                className={`py-2 rounded-lg font-bold text-xs border-2 transition-all
-                                  ${currentStatus === 'Kendala' ? 'bg-red-50 border-red-500 text-red-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-500'}`}
-                              >
-                                ⚠️ Kendala
-                              </button>
+                              <button onClick={() => handleMrsChange(item.id, 'status', 'Sesuai', item.name)} className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${currentStatus === 'Sesuai' ? 'bg-green-50 border-green-500 text-green-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>✅ Sesuai</button>
+                              <button onClick={() => handleMrsChange(item.id, 'status', 'Kendala', item.name)} className={`py-2 rounded-lg font-bold text-xs border-2 transition-all ${currentStatus === 'Kendala' ? 'bg-red-50 border-red-500 text-red-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>⚠️ Kendala</button>
                             </div>
                           </div>
                         </div>
                       ) : (
                         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
-                          <button 
-                            onClick={() => handleKrsChange(item.id, 'Sesuai', 'Baik')}
-                            className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2
-                              ${condition === 'Baik' ? 'bg-green-50 border-green-500 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-green-200'}`}
-                          >
-                            ✅ Baik
-                          </button>
-                          <button 
-                            onClick={() => handleKrsChange(item.id, 'Kendala', 'Kotor')}
-                            className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2
-                              ${condition === 'Kotor' ? 'bg-yellow-50 border-yellow-500 text-yellow-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-yellow-200'}`}
-                          >
-                            🧹 Kotor
-                          </button>
-                          <button 
-                            onClick={() => handleKrsChange(item.id, 'Kendala', 'Rusak')}
-                            className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2
-                              ${condition === 'Rusak' ? 'bg-orange-50 border-orange-500 text-orange-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-orange-200'}`}
-                          >
-                            ⚠️ Rusak
-                          </button>
-                          <button 
-                            onClick={() => handleKrsChange(item.id, 'Kendala', 'Hilang')}
-                            className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2
-                              ${condition === 'Hilang' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-500 hover:border-red-200'}`}
-                          >
-                            ❌ Hilang
-                          </button>
+                          <button onClick={() => handleKrsChange(item.id, 'Sesuai', 'Baik')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Baik' ? 'bg-green-50 border-green-500 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>✅ Baik</button>
+                          <button onClick={() => handleKrsChange(item.id, 'Kendala', 'Kotor')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Kotor' ? 'bg-yellow-50 border-yellow-500 text-yellow-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>🧹 Kotor</button>
+                          <button onClick={() => handleKrsChange(item.id, 'Kendala', 'Rusak')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Rusak' ? 'bg-orange-50 border-orange-500 text-orange-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>⚠️ Rusak</button>
+                          <button onClick={() => handleKrsChange(item.id, 'Kendala', 'Hilang')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Hilang' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>❌ Hilang</button>
                         </div>
                       )}
 
                       {((actionType === 'MRS' && currentStatus === 'Kendala') || (actionType === 'KRS' && checklist[item.id]?.status === 'Kendala')) && (
                         <div className="mt-1 animate-in slide-in-from-top-2 duration-200">
-                          <textarea 
-                            placeholder="Tuliskan catatan detail kendala..."
-                            value={checkData.note || ''}
-                            onChange={(e) => handleNoteChange(item.id, e.target.value)}
-                            className="w-full p-2.5 border-2 border-red-200 rounded-lg focus:border-red-500 outline-none text-xs bg-red-50/30 min-h-[60px]"
-                          />
+                          <textarea placeholder="Tuliskan catatan detail kendala..." value={checkData.note || ''} onChange={(e) => handleNoteChange(item.id, e.target.value)} className="w-full p-2.5 border-2 border-red-200 rounded-lg focus:border-red-500 outline-none text-xs bg-red-50/30 min-h-[60px]"/>
                         </div>
                       )}
                     </div>
@@ -729,15 +738,7 @@ export default function App() {
         </div>
 
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
-          <button 
-            disabled={!isStep2Valid}
-            onClick={() => setStep(3)}
-            className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm
-              ${isStep2Valid 
-                ? 'bg-blue-600 text-white hover:bg-blue-700 active:scale-[0.98]' 
-                : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              }`}
-          >
+          <button disabled={!isStep2Valid} onClick={() => setStep(3)} className={`w-full py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm ${isStep2Valid ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
             Lanjut Ringkasan <ArrowRight size={20} />
           </button>
         </div>
@@ -752,9 +753,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
         <header className="bg-white px-4 py-4 border-b border-slate-200 flex items-center gap-3 shadow-sm sticky top-0 z-10">
-           <button onClick={() => setStep(2)} className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-full">
-            <ArrowLeft size={24} />
-          </button>
+           <button onClick={() => setStep(2)} className="p-2 -ml-2 text-slate-500 hover:bg-slate-100 rounded-full"><ArrowLeft size={24} /></button>
           <h1 className="text-lg font-bold text-slate-800">Ringkasan Laporan</h1>
         </header>
 
@@ -762,55 +761,26 @@ export default function App() {
           
           <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
             <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-slate-500 font-medium mb-1">Gedung / Kamar</p>
-                <p className="font-bold text-slate-800 uppercase">{building} - {roomNumber}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 font-medium mb-1">Tipe Kamar</p>
-                <p className="font-bold text-slate-800">{roomType}</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 font-medium mb-1">Tanggal & Jam</p>
-                <p className="font-bold text-slate-800">{checkDate} ({checkTime})</p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-500 font-medium mb-1">Konteks</p>
-                <p className={`font-bold ${actionType === 'MRS' ? 'text-green-600' : 'text-orange-600'}`}>
-                  Sebelum {actionType}
-                </p>
-              </div>
-               <div className="col-span-2 pt-3 border-t border-slate-100">
-                <p className="text-xs text-slate-500 font-medium mb-1">Petugas Pemeriksa</p>
-                <p className="font-bold text-slate-800">{officerName}</p>
-              </div>
+              <div><p className="text-xs text-slate-500 font-medium mb-1">Gedung / Kamar</p><p className="font-bold text-slate-800 uppercase">{building} - {roomNumber}</p></div>
+              <div><p className="text-xs text-slate-500 font-medium mb-1">Tipe Kamar</p><p className="font-bold text-slate-800">{roomType}</p></div>
+              <div><p className="text-xs text-slate-500 font-medium mb-1">Tanggal & Jam</p><p className="font-bold text-slate-800">{checkDate} ({checkTime})</p></div>
+              <div><p className="text-xs text-slate-500 font-medium mb-1">Konteks</p><p className={`font-bold ${actionType === 'MRS' ? 'text-green-600' : 'text-orange-600'}`}>Sebelum {actionType}</p></div>
+              <div className="col-span-2 pt-3 border-t border-slate-100"><p className="text-xs text-slate-500 font-medium mb-1">Petugas Pemeriksa</p><p className="font-bold text-slate-800">{officerName}</p></div>
             </div>
           </div>
 
           {issues.length > 0 ? (
             <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4">
-              <h3 className="font-bold text-red-800 flex items-center gap-2 mb-3">
-                <AlertCircle size={20} /> {issues.length} Item Memiliki Kendala
-              </h3>
+              <h3 className="font-bold text-red-800 flex items-center gap-2 mb-3"><AlertCircle size={20} /> {issues.length} Item Memiliki Kendala</h3>
               <ul className="space-y-3">
                 {issues.map(item => {
                   const checkData = checklist[item.id];
                   return (
                     <li key={item.id} className="bg-white p-3 rounded-lg shadow-sm border border-red-100">
                       <span className="font-semibold text-slate-800 text-sm block mb-1">{cleanItemName(item.name)}</span>
-                      {actionType === 'MRS' && (
-                        <p className="text-xs text-slate-600 mb-1">Jumlah: <b>{checkData.qty} {checkData.unit}</b></p>
-                      )}
-                      {actionType === 'KRS' && checkData.condition && (
-                        <span className="inline-block bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded font-bold mb-1 mr-2">
-                          Kondisi: {checkData.condition}
-                        </span>
-                      )}
-                      {checkData.note && (
-                        <p className="text-xs text-red-600 bg-red-50 p-2 rounded mt-1">
-                          Catatan: {checkData.note}
-                        </p>
-                      )}
+                      {actionType === 'MRS' && (<p className="text-xs text-slate-600 mb-1">Jumlah: <b>{checkData.qty} {checkData.unit}</b></p>)}
+                      {actionType === 'KRS' && checkData.condition && (<span className="inline-block bg-orange-100 text-orange-800 text-xs px-2 py-1 rounded font-bold mb-1 mr-2">Kondisi: {checkData.condition}</span>)}
+                      {checkData.note && (<p className="text-xs text-red-600 bg-red-50 p-2 rounded mt-1">Catatan: {checkData.note}</p>)}
                     </li>
                   )
                 })}
@@ -820,24 +790,16 @@ export default function App() {
             <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-5 flex flex-col items-center justify-center text-center">
               <CheckCircle2 size={48} className="text-green-500 mb-2" />
               <h3 className="font-bold text-green-800 text-lg">Semua Item {actionType === 'KRS' ? 'Kondisi Baik' : 'Sesuai'}!</h3>
-              <p className="text-green-600 text-sm mt-1">
-                {actionType === 'MRS' ? 'Kamar siap untuk digunakan.' : 'Tidak ada inventaris bermasalah saat pasien pulang.'}
-              </p>
+              <p className="text-green-600 text-sm mt-1">{actionType === 'MRS' ? 'Kamar siap untuk digunakan.' : 'Tidak ada inventaris bermasalah saat pasien pulang.'}</p>
             </div>
           )}
-
           <div className="bg-white p-4 rounded-xl border border-slate-200 flex justify-between items-center text-sm font-semibold">
-            <span className="text-slate-600">Total Item Sesuai/Baik</span>
-            <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full">{oks.length} Item</span>
+            <span className="text-slate-600">Total Item Sesuai/Baik</span><span className="bg-green-100 text-green-700 px-3 py-1 rounded-full">{oks.length} Item</span>
           </div>
         </div>
 
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
-          <button 
-            onClick={handleSubmit}
-            disabled={isSubmitting || !user}
-            className="w-full py-4 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center gap-2 hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md disabled:opacity-70 disabled:cursor-wait"
-          >
+          <button onClick={handleSubmit} disabled={isSubmitting} className="w-full py-4 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-wait">
             {isSubmitting ? 'Menyimpan ke Spreadsheet...' : <><Save size={20} /> Simpan Laporan</>}
           </button>
         </div>
@@ -848,24 +810,10 @@ export default function App() {
   if (step === 4) {
     return (
       <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center font-sans p-6 text-center">
-        <div className="bg-white/20 p-5 rounded-full mb-6 animate-bounce">
-          <div className="bg-white p-4 rounded-full">
-            <CheckCheck size={64} className="text-blue-600" />
-          </div>
-        </div>
+        <div className="bg-white/20 p-5 rounded-full mb-6 animate-bounce"><div className="bg-white p-4 rounded-full"><CheckCheck size={64} className="text-blue-600" /></div></div>
         <h1 className="text-3xl font-bold text-white mb-2">Data Tersimpan!</h1>
-        <p className="text-blue-100 mb-8 max-w-sm">
-          {actionType === 'MRS' 
-            ? `Sesi Kamar ${building} - ${roomNumber.toUpperCase()} berhasil dikirim ke Spreadsheet.`
-            : `Sesi Kamar ${building} - ${roomNumber.toUpperCase()} berhasil ditutup dan direkap ke Spreadsheet.`}
-        </p>
-        
-        <button 
-          onClick={resetForm}
-          className="w-full max-w-sm py-4 rounded-xl bg-white text-blue-700 font-bold hover:bg-blue-50 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2"
-        >
-          <History size={20} /> Kembali ke Menu Utama
-        </button>
+        <p className="text-blue-100 mb-8 max-w-sm">Sesi Kamar {building} - {roomNumber.toUpperCase()} berhasil dikirim ke Spreadsheet.</p>
+        <button onClick={resetForm} className="w-full max-w-sm py-4 rounded-xl bg-white text-blue-700 font-bold flex items-center justify-center gap-2"><History size={20} /> Kembali ke Menu Utama</button>
       </div>
     );
   }
