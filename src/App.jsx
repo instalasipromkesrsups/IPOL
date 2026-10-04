@@ -334,7 +334,6 @@ export default function App() {
     }
   };
 
-  // Fungsi sendDataToSpreadsheet yang diperbarui agar proses simpan lancar
   const sendDataToSpreadsheet = async (payloadData) => {
     try {
       if (!WEB_APP_URL.includes("script.google.com")) return;
@@ -352,10 +351,11 @@ export default function App() {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const sessionIdGenerated = selectedSessionId || ("AUTO_" + new Date().getTime());
+      // Pastikan sessionId selalu terkirim dengan benar (menggunakan ID database atau generate baru jika manual)
+      const finalSessionId = selectedSessionId ? selectedSessionId : ("AUTO_" + new Date().getTime());
 
       await sendDataToSpreadsheet({
-        sessionId: sessionIdGenerated,
+        sessionId: finalSessionId,
         building,
         roomNumber: roomNumber.toUpperCase(),
         roomType,
