@@ -22,7 +22,7 @@ import {
   RefreshCcw
 } from 'lucide-react';
 
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyCU5Rb9vC2zLjfsdGAXBOK2PTY6Gg-up3IkrpuqmZt-bGRnj0AOssJkR04WYjxLhnn/exec"; 
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwGWjY7_yZGTiETClJIdW5VvhZ75b8IvRDv_dkG9clOMuUVSC6rYa8ZUTqJeGyapOnE/exec"; 
 
 const extractStandardQty = (name) => {
   const match = name.match(/\((\d+)\s*(Unit|Buah|Set)\)/i);
@@ -717,7 +717,7 @@ export default function App() {
                         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
                           <button onClick={() => handleKrsChange(item.id, 'Sesuai', 'Baik')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Baik' ? 'bg-green-50 border-green-500 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>✅ Baik</button>
                           <button onClick={() => handleKrsChange(item.id, 'Kendala', 'Kotor')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Kotor' ? 'bg-yellow-50 border-yellow-500 text-yellow-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>🧹 Kotor</button>
-                          <button onClick={() => handleKrsChange(item.id, 'Kendala', 'Rusak')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Rusak' ? 'bg-orange-50 border-orange-500 text-orange-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>⚠️️ Rusak</button>
+                          <button onClick={() => handleKrsChange(item.id, 'Kendala', 'Rusak')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Rusak' ? 'bg-orange-50 border-orange-500 text-orange-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>⚠️ Rusak</button>
                           <button onClick={() => handleKrsChange(item.id, 'Kendala', 'Hilang')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Hilang' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>❌ Hilang</button>
                         </div>
                       )}
@@ -797,7 +797,11 @@ export default function App() {
         </div>
 
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-10px_15px_-3px_rgba(0,0,0,0.05)]">
-          <button onClick={handleSubmit} disabled={isSubmitting} className="w-full py-4 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-wait">
+          <button 
+            onClick={handleSubmit} 
+            disabled={isSubmitting} 
+            className="w-full py-4 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center gap-2 hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md disabled:opacity-70 disabled:cursor-wait"
+          >
             {isSubmitting ? 'Menyimpan ke Spreadsheet...' : <><Save size={20} /> Simpan Laporan</>}
           </button>
         </div>
