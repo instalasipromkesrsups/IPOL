@@ -385,7 +385,7 @@ export default function App() {
   // Fungsi Kirim Data ke Google Spreadsheet via Web App URL
   const sendDataToSpreadsheet = async (payloadData) => {
     try {
-      const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz.../exec"; 
+      const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwmFQ_4hNDikjNhTZM_t3eYnqYqUebbqqjQN0pWW5t3ODCHGiPyUUhUe8CyAtqGan7C/exec"; 
       if (!WEB_APP_URL.includes("script.google.com")) return;
 
       await fetch(WEB_APP_URL, {
