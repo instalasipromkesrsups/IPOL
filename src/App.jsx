@@ -814,7 +814,7 @@ export default function App() {
       <div className="min-h-screen bg-blue-600 flex flex-col items-center justify-center font-sans p-6 text-center">
         <div className="bg-white/20 p-5 rounded-full mb-6 animate-bounce"><div className="bg-white p-4 rounded-full"><CheckCheck size={64} className="text-blue-600" /></div></div>
         <h1 className="text-3xl font-bold text-white mb-2">Data Tersimpan!</h1>
-        <p className="text-blue-100 mb-8 max-w-sm">Sesi Kamar {building} - {roomNumber.toUpperCase()} berhasil dikirim ke Spreadsheet.</p>
+        <p className="text-blue-100 mb-8 max-w-sm">Sesi Kamar {building} - {roomNumber.toUpperCase()} berhasil ditutup dan dikirim ke Spreadsheet.</p>
         <button onClick={resetForm} className="w-full max-w-sm py-4 rounded-xl bg-white text-blue-700 font-bold flex items-center justify-center gap-2"><History size={20} /> Kembali ke Menu Utama</button>
       </div>
     );
