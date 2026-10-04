@@ -22,7 +22,7 @@ import {
   RefreshCcw
 } from 'lucide-react';
 
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbx10ILuqRfBJqhK7CnmnPnv7MVMhkdtWInqqy-TTyKI9DVqBybZCjzNWYG1QSmAxjrA/exec"; 
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwRPAa3bKmXToPkstA6sa6t5ad42Vu2clH5MHB4qF7Mdw9IDd8HrdbkIoNwF_OaWKI0/exec"; 
 
 const extractStandardQty = (name) => {
   const match = name.match(/\((\d+)\s*(Unit|Buah|Set)\)/i);
@@ -334,6 +334,7 @@ export default function App() {
     }
   };
 
+  // Fungsi sendDataToSpreadsheet yang diperbarui agar proses simpan lancar
   const sendDataToSpreadsheet = async (payloadData) => {
     try {
       if (!WEB_APP_URL.includes("script.google.com")) return;
