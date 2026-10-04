@@ -22,7 +22,6 @@ import {
   RefreshCcw
 } from 'lucide-react';
 
-// MASUKKAN URL SPREADSHEET (DEPLOYMENT BARU) ANDA DI SINI
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyCU5Rb9vC2zLjfsdGAXBOK2PTY6Gg-up3IkrpuqmZt-bGRnj0AOssJkR04WYjxLhnn/exec"; 
 
 const extractStandardQty = (name) => {
@@ -231,7 +230,6 @@ export default function App() {
   const [checklist, setChecklist] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // FUNGSI PENARIKAN DATA AKTIF (MRS) DARI SPREADSHEET
   const fetchActiveSessions = async () => {
     setIsLoadingData(true);
     try {
@@ -719,7 +717,7 @@ export default function App() {
                         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100">
                           <button onClick={() => handleKrsChange(item.id, 'Sesuai', 'Baik')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Baik' ? 'bg-green-50 border-green-500 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>✅ Baik</button>
                           <button onClick={() => handleKrsChange(item.id, 'Kendala', 'Kotor')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Kotor' ? 'bg-yellow-50 border-yellow-500 text-yellow-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>🧹 Kotor</button>
-                          <button onClick={() => handleKrsChange(item.id, 'Kendala', 'Rusak')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Rusak' ? 'bg-orange-50 border-orange-500 text-orange-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>⚠️ Rusak</button>
+                          <button onClick={() => handleKrsChange(item.id, 'Kendala', 'Rusak')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Rusak' ? 'bg-orange-50 border-orange-500 text-orange-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>⚠️️ Rusak</button>
                           <button onClick={() => handleKrsChange(item.id, 'Kendala', 'Hilang')} className={`py-2.5 rounded-lg font-bold text-xs transition-colors border-2 ${condition === 'Hilang' ? 'bg-red-50 border-red-500 text-red-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>❌ Hilang</button>
                         </div>
                       )}
