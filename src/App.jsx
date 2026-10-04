@@ -23,8 +23,14 @@ import {
   Building,
   Edit3
 } from 'lucide-react';
-
-const firebaseConfig = {};
+const firebaseConfig = {
+  apiKey: "AIzaSyDummyKeyBiarGaCrash123456789",
+  authDomain: "dummy.firebaseapp.com",
+  projectId: "dummy-project",
+  storageBucket: "dummy.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef"
+};
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
