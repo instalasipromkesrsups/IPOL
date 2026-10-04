@@ -1,7 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, setDoc, updateDoc, onSnapshot, collection } from 'firebase/firestore';
 import { 
   ClipboardCheck, 
   BedDouble, 
@@ -23,20 +20,8 @@ import {
   Building,
   Edit3
 } from 'lucide-react';
-const firebaseConfig = {
-  apiKey: "AIzaSyDummyKeyBiarGaCrash123456789",
-  authDomain: "dummy.firebaseapp.com",
-  projectId: "dummy-project",
-  storageBucket: "dummy.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
-};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-// Helper untuk ekstrak standar angka & satuan dari string nama inventaris
+// Firebase dilewati sepenuhnya agar tidak error
 const extractStandardQty = (name) => {
   const match = name.match(/\((\d+)\s*(Unit|Buah|Set)\)/i);
   return match ? parseInt(match[1], 10) : 1;
@@ -224,7 +209,7 @@ const INVENTORY_DATA = {
 };
 
 export default function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(true);
   const [activeSessions, setActiveSessions] = useState([]);
   
   const [step, setStep] = useState(1);
@@ -234,7 +219,7 @@ export default function App() {
   const [building, setBuilding] = useState('Gedung B'); 
   const [officerName, setOfficerName] = useState('');
   
-  const [krsInputMode, setKrsInputMode] = useState('db'); // 'db' atau 'manual'
+  const [krsInputMode, setKrsInputMode] = useState('manual'); // Dipaksa manual karena DB Firebase tidak dipakai
   const [selectedSessionId, setSelectedSessionId] = useState('');
   const [mrsReferenceData, setMrsReferenceData] = useState(null);
 
@@ -242,46 +227,6 @@ export default function App() {
   const [checkTime, setCheckTime] = useState('');
   const [checklist, setChecklist] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Initialize Auth
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        console.error("Auth Error:", error);
-      }
-    };
-    initAuth();
-    const unsubscribe = onAuthStateChanged(auth, setUser);
-    return () => unsubscribe();
-  }, []);
-
-  // Fetch Active Sessions from Firestore
-  useEffect(() => {
-    if (!user) return;
-    const sessionsRef = collection(db, 'artifacts', appId, 'public', 'data', 'inventory_sessions');
-    
-    const unsubscribe = onSnapshot(sessionsRef, (snapshot) => {
-      const allSessions = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      const activeOnly = allSessions
-        .filter(s => s.status === 'active')
-        .sort((a, b) => new Date(b.mrsCreatedAt) - new Date(a.mrsCreatedAt));
-        
-      setActiveSessions(activeOnly);
-    }, (error) => {
-      console.error("Firestore Listen Error:", error);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
 
   useEffect(() => {
     if (step === 1) {
@@ -312,19 +257,6 @@ export default function App() {
         [itemId]: { ...current, [field]: value }
       };
     });
-  };
-
-  // Helper Auto-Fill MRS Sesuai
-  const autoFillMrsItem = (item) => {
-    setChecklist(prev => ({
-      ...prev,
-      [item.id]: {
-        qty: extractStandardQty(item.name),
-        unit: extractUnitType(item.name),
-        status: 'Sesuai',
-        note: ''
-      }
-    }));
   };
 
   // Handle KRS input
@@ -372,8 +304,7 @@ export default function App() {
 
   const isStep1Valid = actionType === 'MRS' 
     ? (roomType !== '' && actionType !== '' && roomNumber.trim() !== '' && building !== '' && officerName.trim() !== '' && checkDate !== '' && checkTime !== '')
-    : (actionType === 'KRS' && officerName.trim() !== '' && checkDate !== '' && checkTime !== '' && 
-        ((krsInputMode === 'db' && selectedSessionId !== '') || (krsInputMode === 'manual' && roomNumber.trim() !== '' && roomType !== '' && building !== '')));
+    : (actionType === 'KRS' && officerName.trim() !== '' && checkDate !== '' && checkTime !== '' && roomNumber.trim() !== '' && roomType !== '' && building !== '');
 
   const isStep2Valid = currentItems.length > 0 && Object.keys(checklist).length === currentItems.length;
 
@@ -405,77 +336,27 @@ export default function App() {
     }
   };
 
+  // --- INI FUNGSI YANG SUDAH DIBERSIHKAN DARI FIREBASE ---
   const handleSubmit = async () => {
-    if (!user) return;
     setIsSubmitting(true);
     
     try {
-      const sessionIdGenerated = selectedSessionId || ("AUTO_" + new Date().getTime());
+      const sessionIdGenerated = "AUTO_" + new Date().getTime();
 
-      if (actionType === 'MRS') {
-        const sessionRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'inventory_sessions'));
-        await setDoc(sessionRef, {
-          roomNumber: roomNumber.toUpperCase(),
-          building,
-          roomType,
-          mrsOfficer: officerName,
-          mrsDate: checkDate,
-          mrsTime: checkTime,
-          mrsChecklist: checklist,
-          status: 'active',
-          mrsCreatedAt: new Date().toISOString()
-        });
+      // LANGSUNG tembak ke Google Spreadsheet (Mengabaikan Firebase sepenuhnya)
+      await sendDataToSpreadsheet({
+        sessionId: sessionIdGenerated,
+        building,
+        roomNumber: roomNumber.toUpperCase(),
+        roomType,
+        actionType: actionType,
+        officerName,
+        checkDate,
+        checkTime,
+        checklist
+      });
 
-        await sendDataToSpreadsheet({
-          sessionId: sessionRef.id,
-          building,
-          roomNumber: roomNumber.toUpperCase(),
-          roomType,
-          actionType: 'MRS',
-          officerName,
-          checkDate,
-          checkTime,
-          checklist
-        });
-
-      } else if (actionType === 'KRS') {
-        if (krsInputMode === 'db' && selectedSessionId) {
-          const sessionRef = doc(db, 'artifacts', appId, 'public', 'data', 'inventory_sessions', selectedSessionId);
-          await updateDoc(sessionRef, {
-            krsOfficer: officerName,
-            krsDate: checkDate,
-            krsTime: checkTime,
-            krsChecklist: checklist,
-            status: 'completed',
-            krsCompletedAt: new Date().toISOString()
-          });
-        } else {
-          const sessionRef = doc(collection(db, 'artifacts', appId, 'public', 'data', 'inventory_sessions'));
-          await setDoc(sessionRef, {
-            roomNumber: roomNumber.toUpperCase(),
-            building,
-            roomType,
-            krsOfficer: officerName,
-            krsDate: checkDate,
-            krsTime: checkTime,
-            krsChecklist: checklist,
-            status: 'completed-manual',
-            krsCompletedAt: new Date().toISOString()
-          });
-        }
-
-        await sendDataToSpreadsheet({
-          sessionId: sessionIdGenerated,
-          building,
-          roomNumber: roomNumber.toUpperCase(),
-          roomType,
-          actionType: 'KRS',
-          officerName,
-          checkDate,
-          checkTime,
-          checklist
-        });
-      }
+      // Lanjut ke halaman centang sukses
       setStep(4);
     } catch (error) {
       console.error("Error saving document: ", error);
@@ -494,7 +375,7 @@ export default function App() {
     setChecklist({});
     setSelectedSessionId('');
     setMrsReferenceData(null);
-    setKrsInputMode('db');
+    setKrsInputMode('manual');
   };
 
   const selectPredefinedOfficer = (name) => {
@@ -512,8 +393,8 @@ export default function App() {
           <p className="text-blue-100 text-sm font-medium">Sistem Terintegrasi Pengecekan Rawat Inap</p>
           
           <div className="absolute top-5 right-5 bg-white/20 px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-semibold backdrop-blur-sm">
-            <Database size={14} className={user ? "text-green-300" : "text-yellow-300 animate-pulse"} />
-            <span>{user ? 'Online' : 'Menghubungkan...'}</span>
+            <Database size={14} className="text-green-300" />
+            <span>Online</span>
           </div>
         </header>
 
@@ -591,7 +472,7 @@ export default function App() {
             </div>
           </div>
 
-          {actionType === 'MRS' && (
+          {(actionType === 'MRS' || actionType === 'KRS') && (
             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-6">
               <div>
                 <h2 className="font-bold text-slate-700 mb-3 px-1">Pilih Tipe Kamar</h2>
@@ -653,128 +534,6 @@ export default function App() {
               </div>
             </div>
           )}
-
-          {actionType === 'KRS' && (
-             <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
-               
-               <div className="grid grid-cols-2 gap-2 bg-slate-200 p-1 rounded-xl">
-                 <button
-                   onClick={() => { setKrsInputMode('db'); setSelectedSessionId(''); }}
-                   className={`py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all
-                     ${krsInputMode === 'db' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600'}`}
-                 >
-                   <Search size={16} /> Dari Kamar Aktif
-                 </button>
-                 <button
-                   onClick={() => { setKrsInputMode('manual'); setSelectedSessionId(''); setMrsReferenceData(null); }}
-                   className={`py-2.5 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-all
-                     ${krsInputMode === 'manual' ? 'bg-white text-orange-700 shadow-sm' : 'text-slate-600'}`}
-                 >
-                   <Edit3 size={16} /> Input Manual
-                 </button>
-               </div>
-
-               {krsInputMode === 'db' ? (
-                 <div className="space-y-3">
-                   <h2 className="font-bold text-slate-700 px-1 text-sm flex items-center gap-2">
-                     Pilih Kamar Aktif (Database)
-                   </h2>
-                   {activeSessions.length === 0 ? (
-                     <div className="bg-slate-100 p-6 rounded-2xl text-center border-2 border-dashed border-slate-300">
-                        <History size={32} className="text-slate-400 mx-auto mb-2" />
-                        <p className="text-slate-600 font-medium text-sm">Tidak ada pasien/kamar aktif saat ini.</p>
-                        <p className="text-slate-500 text-xs mt-1">Silakan gunakan mode <b>Input Manual</b>.</p>
-                     </div>
-                   ) : (
-                     <div className="space-y-3">
-                       {activeSessions.map(session => (
-                          <button
-                            key={session.id}
-                            onClick={() => handleSelectSession(session.id)}
-                            className={`w-full text-left p-4 rounded-xl border-2 transition-all flex justify-between items-center
-                              ${selectedSessionId === session.id 
-                                ? 'border-orange-500 bg-orange-50 shadow-sm' 
-                                : 'border-slate-200 hover:border-slate-300 bg-white'
-                              }`}
-                          >
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-bold text-slate-800 text-lg">{session.building || 'Gedung B'} - {session.roomNumber}</span>
-                                <span className="bg-slate-200 text-slate-700 text-[10px] px-2 py-0.5 rounded-full font-bold">{session.roomType}</span>
-                              </div>
-                              <p className="text-xs text-slate-500">Masuk: {session.mrsDate} oleh {session.mrsOfficer}</p>
-                            </div>
-                            {selectedSessionId === session.id && <CheckCircle2 className="text-orange-500" size={24} />}
-                          </button>
-                       ))}
-                     </div>
-                   )}
-                 </div>
-               ) : (
-                 <div className="space-y-4 animate-in fade-in duration-200">
-                   <div>
-                     <h2 className="font-bold text-slate-700 mb-3 px-1">Pilih Tipe Kamar</h2>
-                     <div className="flex flex-col gap-3">
-                       {[
-                         { id: 'President Suite', icon: <Building size={20} />, color: 'purple' },
-                         { id: 'VVIP', icon: <Crown size={20} />, color: 'indigo' },
-                         { id: 'VIP', icon: <Star size={20} />, color: 'blue' }
-                       ].map(type => (
-                         <button
-                           key={type.id}
-                           onClick={() => setRoomType(type.id)}
-                           className={`p-4 rounded-xl border-2 flex items-center justify-between transition-all
-                             ${roomType === type.id 
-                               ? `border-${type.color}-500 bg-${type.color}-50 shadow-sm` 
-                               : 'border-slate-200 hover:border-slate-300'
-                             }`}
-                         >
-                           <div className="flex items-center gap-3">
-                             <div className={`p-2 rounded-lg ${roomType === type.id ? `bg-${type.color}-100 text-${type.color}-600` : 'bg-slate-100 text-slate-500'}`}>
-                               {type.icon}
-                             </div>
-                             <span className={`font-bold ${roomType === type.id ? `text-${type.color}-700` : 'text-slate-600'}`}>
-                               {type.id}
-                             </span>
-                           </div>
-                           {roomType === type.id && <CheckCircle2 className={`text-${type.color}-500`} size={24} />}
-                         </button>
-                       ))}
-                     </div>
-                   </div>
-
-                   <div className="grid grid-cols-3 gap-3">
-                     <div className="col-span-1">
-                       <h2 className="font-bold text-slate-700 mb-2 flex items-center gap-1.5 text-sm">
-                         <Building2 size={16} className="text-orange-500"/> Gedung
-                       </h2>
-                       <select
-                         value={building}
-                         onChange={(e) => setBuilding(e.target.value)}
-                         className="w-full p-4 border-2 border-slate-200 rounded-xl focus:border-orange-500 outline-none font-bold text-slate-800 bg-white"
-                       >
-                         <option value="Gedung B">Gedung B</option>
-                         <option value="Gedung D">Gedung D</option>
-                       </select>
-                     </div>
-                     <div className="col-span-2">
-                       <h2 className="font-bold text-slate-700 mb-2 flex items-center gap-2 text-sm">
-                         <BedDouble size={16} className="text-orange-500"/> Nomor Kamar
-                       </h2>
-                       <input 
-                         type="text" 
-                         placeholder="Contoh: 301" 
-                         value={roomNumber}
-                         onChange={(e) => setRoomNumber(e.target.value)}
-                         className="w-full p-4 border-2 border-slate-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-200 outline-none transition-all font-medium uppercase text-lg"
-                       />
-                     </div>
-                   </div>
-                 </div>
-               )}
-             </div>
-          )}
-
         </div>
 
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
@@ -1079,7 +838,7 @@ export default function App() {
             disabled={isSubmitting || !user}
             className="w-full py-4 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center gap-2 hover:bg-blue-700 active:scale-[0.98] transition-all shadow-md disabled:opacity-70 disabled:cursor-wait"
           >
-            {isSubmitting ? 'Menyimpan ke Database & Spreadsheet...' : <><Save size={20} /> Simpan Laporan</>}
+            {isSubmitting ? 'Menyimpan ke Spreadsheet...' : <><Save size={20} /> Simpan Laporan</>}
           </button>
         </div>
       </div>
@@ -1097,7 +856,7 @@ export default function App() {
         <h1 className="text-3xl font-bold text-white mb-2">Data Tersimpan!</h1>
         <p className="text-blue-100 mb-8 max-w-sm">
           {actionType === 'MRS' 
-            ? `Sesi Kamar ${building} - ${roomNumber.toUpperCase()} berhasil dibuka dan dikirim ke Spreadsheet.`
+            ? `Sesi Kamar ${building} - ${roomNumber.toUpperCase()} berhasil dikirim ke Spreadsheet.`
             : `Sesi Kamar ${building} - ${roomNumber.toUpperCase()} berhasil ditutup dan direkap ke Spreadsheet.`}
         </p>
         
