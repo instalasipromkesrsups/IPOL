@@ -412,7 +412,7 @@ export default function App() {
             />
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
               <span className="text-xs text-slate-400 font-medium py-1 shrink-0">Pilih cepat:</span>
-              {['Priska', 'Intan'].map(name => (
+              {['Prizca', 'Intan'].map(name => (
                 <button 
                   key={name}
                   onClick={() => selectPredefinedOfficer(name)}
